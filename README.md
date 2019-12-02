@@ -1,7 +1,7 @@
 # HouseProject
 The art of predicting the sale price of homes in Iowa using multiple linear regression and other good stuff.
 
-TODO:
+TO-DO:
 ## Simple modelling
   * Simple multiple linear regression model
   * Diagnostics
