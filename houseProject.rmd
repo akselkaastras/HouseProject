@@ -26,6 +26,16 @@ references:
   issued:
     year: "2001"
     month: 10
+    
+- id: karim2019
+  title: "Visual Diagnostics and Model Validation"
+  author:
+    - family: "Lounici"
+      given: "Karim"
+  journal: "Note on Moodle"
+  issued:
+    year: "2019"
+    month: 10
 ---
 
 # Introduction. 
@@ -249,6 +259,8 @@ multiplot(plot1,plot2,plot3,plot4,plot5,plot6,plot7,plot8,plot9,plot10, layout=l
 ```
 One idea we could explore further is to merge the different neighborhoods in the neighborhood variable if the sale prices are similar enough. In this way we could reduce the dimensionality of this categorical variable.
 
+%%%  What about pairwise correlation? 
+
 # Modeling and Diagnostics
 Let us start the modeling by a bit of feature engineering in order to prepare our dataset for modeling. This preparation will consists of one-hot encoding of all categorical variables and a standardization of numerical variables. 
 
@@ -265,15 +277,28 @@ varNumStd <- predict(preNum, varNum) # What is going on here?
 varFactors <- full[, !(names(full) %in% varNumNames) & !(names(full) %in% 'SalePrice')]
 varDummy <- as.data.frame(model.matrix(~.-1, varFactors))
 varFull <- cbind(varNumStd, varDummy)
-#dim(varFull)
+
+# Training data
+dimTrain = dim(train)[1]
+varTrain = cbind(train$SalePrice,varFull[1:dimTrain,])
+names(varTrain)[1] = "SalePrice"
 ```
 
-# What about pairwise correlation? 
-## A multiple linear regression model 
 
-* Linear Model
-Simple linear model
-* Diagnostics
+## A multiple linear regression model 
+We have fitted our training data to a simple multiple linear regression model to the data of $p=199$ variables and $n = 1095$,
+$$Y = X^T\beta^\ast + \varepsilon,$$
+where $\varepsilon \sim N(0,\sigma^2)$, $(X,Y) \in \mathbb{R}^{p} \times \mathbb{R}$ and $\beta^\ast\in \mathbb{R}^p$ is the unknown regression vector. We assume we have a sample of i.i.d. copies of $(X,Y): (X_i, Y_i)_{i=1}^{n}$. We will explore this assumption further as well as the various assumptions regarding the residuals, see \textbf{P1} to \textbf{P4} in [@karim2019]. Using our designmatrix of all our observations $\mathbb{X}=\left(X_{1}, \ldots, X_{n}\right)^{\top}=\left(X_{i, j}\right)_{1<i<n, 1<j<p}$ and using our observed responses $\mathbb{Y} = \left(Y_1,Y_2,\ldots, Y_n \right )$, we want to estimate $\beta^\ast$ by the following minimization problem
+$$\widehat{\boldsymbol{\beta}}=\arg \min _{\boldsymbol{\beta}\in \mathbb{R}^p}\|\mathbb{Y}-\mathbb{X} \boldsymbol{\beta}\|^{2}.$$
+Notice then that the residuals $\epsilon  = \mathbb{Y}-\mathbb{X} \boldsymbol{\beta} \sim N(0,\sigma^2 I_n)$ This is done in \texttt{R} using the \texttt{lm}-function. The diagnostics for this regression can bee seen in figure \@ref(fig:simplemodel).
+```{r simplemodel, fig.height = 5, fig.width = 7, fig.align = "center", fig.cap = "Distributions of important variables", message=FALSE, warning=FALSE, echo=FALSE}
+simpleLM <- lm( formula="SalePrice ~ .", data=varTrain)
+#summary(simpleLM)
+par(mfrow=c(2,2), mar=c(2.5,2.5,2.5,2.5), mgp=c(1.5,0.5,0)) # Change the panel layout to 2 x 2
+plot(simpleLM)
+par(mfrow=c(1,1)) # Change back to 1 x 1
+```
+
 * Outliers
   - Removing levels with few or no observations
 * Skewness
