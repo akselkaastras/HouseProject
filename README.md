@@ -2,7 +2,7 @@
 The art of predicting the sale price of homes in Iowa using multiple linear regression and other good stuff.
 
 TODO:
-Simple modelling
+## Simple modelling
   * Simple multiple linear regression model
   * Diagnostics
   * Outliers
@@ -11,13 +11,13 @@ Simple modelling
   * More Feature engineering. Not all information is explained
     - Remove low variance variables
   * Check diagnostics again
-More advanced modelling
+## More advanced modelling
   * Lasso
     - Diagnostics
   * Ridge
     - Diagnostics
   * Use glmnet
-Final Models
+## Final Models
   * Report the summary: parameter estimates, standard errors, confidence intervals, and p-values
   * Interpret
   * Compare models
