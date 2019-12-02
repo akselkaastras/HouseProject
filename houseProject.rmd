@@ -272,7 +272,7 @@ varFull <- cbind(varNumStd, varDummy)
 ## A multiple linear regression model 
 
 * Linear Model
-
+Simple linear model
 * Diagnostics
 * Outliers
   - Removing levels with few or no observations
@@ -282,7 +282,6 @@ varFull <- cbind(varNumStd, varDummy)
 ### Diagnostics and feature engineering
 
 * Feature engineering
-
 
 * Multiple linear regression
 * 
