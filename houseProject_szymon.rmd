@@ -1,0 +1,542 @@
+---
+title: "House Prices: Advanced Regression Techniques"
+author: "Aksel Kaastrup Rasmussen"
+date: "11/30/2019"
+output: bookdown::pdf_document2
+subtitle: MAP 553-Regression
+
+references:
+- id: erik2017
+  title: "House prices: Lasso, XGBoost, and a detailed EDA"
+  author:
+  - family: "Bruin"
+    given: "Erik"
+  URL: 'https://www.kaggle.com/erikbruin/house-prices-lasso-xgboost-and-a-detailed-eda'
+  publisher: "Kaggle"
+  issued:
+    year: "2017"
+
+- id: breiman2001
+  title: "Random Forests"
+  author:
+    - family: "Breiman"
+      given: "Leo"
+  URL: 'https://doi.org/10.1023/A:1010933404324'
+  journal: "Machine Learning"
+  issued:
+    year: "2001"
+    month: 10
+---
+
+# Introduction. 
+
+Write a short introduction describing the research problem. Clearly state the
+research hypothesis at the end.
+
+# Exploratory Data Analysis/Inital Modeling. 
+
+
+```{r, libraries, message=FALSE, warning=FALSE, echo=FALSE}
+## Packages load, data load, cleaning and factorization of categorical values
+
+knitr::opts_chunk$set(echo = TRUE)
+options(tinytex.verbose = TRUE)
+
+
+# Load packages
+library(knitr)
+library(ggplot2)
+library(plyr)
+library(dplyr)
+library(corrplot)
+library(caret)
+library(gridExtra)
+library(scales)
+library(Rmisc)
+library(ggrepel)
+library(randomForest)
+library(psych)
+library(xgboost)
+
+# Load data
+load(file = "DataProject.RData")
+
+# Getting rid of id's and saving test labels
+test_labels <- test$Id
+test$Id <- NULL
+train$Id <- NULL
+
+# Combining train and test in full dataset
+test$SalePrice <- NA
+full <- rbind(train, test)
+```
+
+We are given a dataset, which consists of information of large number of residential homes in Ames, Iowa. More precisely our traning and test dataset consists of 1095 and 365 observations respectively with both 67 features. It is clear both cleaning and basic handling of missing values has already taken place, and we will not explore such techniques further here. There has already been taking care of a great deal of ordinal variables using ordinal encoding and normalizing. We will continue this work.
+
+The dataset consists of both numerical, nominal and ordinal variables, and right from the start we will label encode ordinal variables into numbers. This arguably holds for \textit{Street} and \textit{PavedDrive}, since the levels have an order. With this ordinal encoding we ensure the variables keeps the ordered structure. In addition there are lots of categorical \textit{quality} variables, which indeed are ordinal. As an example consider \textit{KitchenQual}. The kitchen quality has an ordered structure ranging from poor to excellent in quality. For this reason we will use ordinal encoding here as well.
+
+The numerical variable \textit{MSSubClass} is clearly a categorical variable, which identifies the type of dwelling involved in the sale. Hence we will also factorize and rename to make this fact clearer.
+
+We have chosen to remove the variable \textit{Utilities}, since this variable is constant for all observations, and finally we have split the data into categorical and numerical variables with dimension 36 and 30 respectively. As a start of the exploratory analysis, let us look into the response variable.
+
+```{r early encoding, message=FALSE, warning=FALSE, echo=FALSE}
+# Ordinal encoding for Street and PavedDrive
+full$Street<-as.integer(recode(full$Street, 'Grvl'=0, 'Pave'=1))
+full$PavedDrive<-as.integer(recode(full$PavedDrive, 'N'=0, 'P'=1, 'Y'=2))
+
+## Ordinal encoding for quality and condition variables
+# LotShape is ordinal
+full$LotShape<-as.integer(recode(full$LotShape,'IR3'=0, 'IR2'=1, 'IR1'=2, 'Reg'=3))
+
+# GarageFinish is ordinal
+full$GarageFinish<-as.integer(recode(full$GarageFinish, 'None'=0, 'Unf'=1, 'RFn'=2, 'Fin'=3))
+
+# GarageQual is ordinal 
+full$GarageQual<-as.integer(recode(full$GarageQual,  None = 0, Po = 1, Fa = 2, TA = 3, Gd = 4, Ex = 5))
+
+# GarageCond is ordinal 
+full$GarageCond<-as.integer(recode(full$GarageCond, None = 0, Po = 1, Fa = 2, TA = 3, Gd = 4, Ex = 5))
+
+# BasementQuality is ordinal
+full$BsmtQual<-as.integer(recode(full$BsmtQual, None = 0, Po = 1, Fa = 2, TA = 3, Gd = 4, Ex = 5))
+
+# BasementCondition is ordinal
+full$BsmtCond<-as.integer(recode(full$BsmtCond, None = 0, Po = 1, Fa = 2, TA = 3, Gd = 4, Ex = 5))
+
+# BasementExposure is ordinal 
+full$BsmtExposure<-as.integer(recode(full$BsmtExposure, 'None'=0, 'No'=1, 'Mn'=2, 'Av'=3, 'Gd'=4))
+
+# Basement Finished Type 1 and 2 are ordinal
+full$BsmtFinType1<-as.integer(recode(full$BsmtFinType1, 'None'=0, 'Unf'=1, 'LwQ'=2, 'Rec'=3, 'BLQ'=4, 'ALQ'=5, 'GLQ'=6))
+full$BsmtFinType2<-as.integer(recode(full$BsmtFinType2, 'None'=0, 'Unf'=1, 'LwQ'=2, 'Rec'=3, 'BLQ'=4, 'ALQ'=5, 'GLQ'=6))
+
+# Masonry veneer type seems to have ordinality
+full$MasVnrType<-as.integer(recode(full$MasVnrType, 'None'=0, 'BrkCmn'=0, 'BrkFace'=1, 'Stone'=2))
+
+# KitchenQual is ordinal
+full$KitchenQual<-as.integer(recode(full$KitchenQual, None = 0, Po = 1, Fa = 2, TA = 3, Gd = 4, Ex = 5))
+
+# Functionality is ordinal
+# From worst to best
+full$Functional <- as.integer(recode(full$Functional,'Sal'=0, 'Sev'=1, 'Maj2'=2, 'Maj1'=3, 'Mod'=4, 'Min2'=5, 'Min1'=6, 'Typ'=7))
+
+#ExteriorQuality is ordinal
+full$ExterQual<-as.integer(recode(full$ExterQual, None = 0, Po = 1, Fa = 2, TA = 3, Gd = 4, Ex = 5))
+
+#ExteriorCondition is ordinal
+full$ExterCond<-as.integer(recode(full$ExterCond, None = 0, Po = 1, Fa = 2, TA = 3, Gd = 4, Ex = 5))
+
+# Factorize and rename MSSubClass
+full$MSSubClass <- as.factor(full$MSSubClass)
+full$MSSubClass<-recode(full$MSSubClass, '20'='1 story 1946+', '30'='1 story 1945-', '40'='1 story unf attic', '45'='1,5 story unf', '50'='1,5 story fin', '60'='2 story 1946+', '70'='2 story 1945-', '75'='2,5 story all ages', '80'='split/multi level', '85'='split foyer', '90'='duplex all style/age', '120'='1 story PUD 1946+', '150'='1,5 story PUD all', '160'='2 story PUD 1946+', '180'='PUD multilevel', '190'='2 family conversion')
+
+# Remove Utilities
+full$Utilities <- NULL
+
+# Splitting data into categorical and numerical variables
+varCat <- which(sapply(full, is.factor)) 
+varNum <- which(sapply(full, is.numeric))
+varNumNames <- names(varNum)
+
+# TODO stopifnot(!is.element("ExterCond", varNumNames))
+
+full_varNum <- full[, varNum]
+
+d1 <- length(varCat)
+d2 <- length(varNum)
+
+```
+
+## The response variable
+We notice the response variable \textit{SalePrice} is right skewed. This is due to the fact that more people can afford a relatively cheap house compared to an expensive house.
+
+```{r fig1, fig.height = 3, fig.width = 5, fig.align = "center", message=FALSE, warning=FALSE, echo=FALSE}
+ggplot(data=full[!is.na(full$SalePrice),], aes(x=SalePrice)) +
+        geom_histogram(fill="steelblue2", binwidth = 10000) +
+        scale_x_continuous(breaks= seq(0, 800000, by=100000), labels = comma)
+```
+This skewness will justify a log-transformation in the early modelling phase in order to satisfy the assumption that the variables are normally distributed. Let us now take a look into the response variables relationship with the numerical variables. Consider figure \@ref(fig:fig2), where we have compared all numerical variables with correlation coefficient above $\frac{1}{2}$ with \textit{SalePrice}.
+
+```{r fig2, fig.height = 4.5, fig.width = 7, fig.align = "center", fig.cap = "Correlation plot of numerical variables of high correlation with SalePrice", message=FALSE, warning=FALSE, echo=FALSE}
+# Plot correlations of variables with high correlation to SalePrice
+cor_varNum <- cor(full_varNum, use="pairwise.complete.obs")
+
+# Sort
+corSort <- as.matrix(sort(cor_varNum[,'SalePrice'], decreasing = TRUE))
+
+# We choose higher than 1/2
+cor_absHigh <- names(which(apply(corSort, 1, function(x) abs(x)>0.5)))
+cor_varNum <- cor_varNum[cor_absHigh, cor_absHigh]
+
+corrplot.mixed(cor_varNum, tl.col="black", tl.pos = "lt", tl.cex = 0.7,cl.cex = .7, number.cex=.7)
+```
+
+It turns out the overall quality of the house and \textit{GrLivArea}, the above ground living area, are the variables of highest correlation with \textit{SalePrice}. We also see there is high intercorrelation between some of this variables of interest. Not surprisingly are features like \textit{GarageCars} and \textit{GarageArea}, and features like \textit{YearBuilt} and \textit{GarageYrBlt} highly correlated. In general we observe that variables concerning the same area (ie. garage, basement and so on) are typically highly correlated. This fact will give reason to a model reduction in the modeling phase by removal of variables that are highly correlated to a more important variable.
+
+### Relationship with correlated features
+Considering figure \@ref(fig:fig3) there seems to be a growing trend to in SalePrice when increasing the overall quality. Also there does not seem to be any obvious outlier, perhaps apart from the somewhat expensive house with overall quality 4. Considering figure \@ref(fig:fig4) there are no strong trend, but one could argue \textit{SalePrice} is a bit higher for newer houses than old houses. 
+
+```{r fig3, fig.height = 3, fig.width = 7, fig.align = "center", fig.cap = "Boxplot of SalePrice divided by their overall quality ranging from 1 to 10.", message=FALSE, warning=FALSE, echo=FALSE}
+# Create boxplots of SalePrice divided into overall quality
+ggplot(data=full[!is.na(full$SalePrice),], aes(x=factor(OverallQual), y=SalePrice))+
+        geom_boxplot(col='steelblue2') + labs(x='Overall Quality from 1 to 10') +
+        scale_y_continuous(breaks= seq(0, 800000, by=100000), labels = comma) + theme(axis.text.x = element_blank())
+```
+
+```{r fig4, fig.height = 3, fig.width = 7, fig.align = "center", fig.cap = "Boxplot of SalePrice divided by the years the houses are built from 1872 to 2010", message=FALSE, warning=FALSE, echo=FALSE}
+#Create boxplots of SalePrice diveded into YearBuilt
+ggplot(data=full[!is.na(full$SalePrice),], aes(x=factor(YearBuilt), y=SalePrice))+
+        geom_boxplot(col='steelblue2') + labs(x='Year built from 1872 to 2010') +
+        scale_y_continuous(breaks= seq(0, 800000, by=100000), labels = comma) + theme(axis.text.x = element_blank())
+```
+
+Considering the relationship between \textit{SalePrice} and \textit{GrLivArea}, the second most correlated variable, we notice in figure \@ref(fig:fig5) that there is a somewhat strong positive trend in SalePrice as function of GrLivArea. One could suggest that house 596 and 199 are outliers, since they are very large properties with a relatively small sale price. Taking a harder look at these houses they have a maximum normalized score of 2.65 in overall quality, which gives further reason to classify them as outliers. We will keep these houses in mind when removing outliers.
+```{r fig5, fig.height = 3, fig.width = 5, fig.align = "center", fig.cap = "Scatterplot with trend of SalePrice as function of GrLivArea", message=FALSE, warning=FALSE, echo=FALSE}
+ggplot(data=full[!is.na(full$SalePrice),], aes(x=GrLivArea, y=SalePrice))+
+        geom_point(col='steelblue2') + geom_smooth(method = "lm", se=FALSE, color="black", aes(group=1)) +
+        scale_y_continuous(breaks= seq(0, 800000, by=100000), labels = comma) +
+        geom_text_repel(aes(label = ifelse(full$GrLivArea[!is.na(full$SalePrice)]>3.5, rownames(full), '')))
+```
+
+## Important predictors
+Now that we have explored the response variable and some of its highly correlated predictors we woud like to take a look on the variables of high importance for the prediction. Of course we can do this by building a multiple linear regression model using all the variables and look at the significance of each variable, but right now we would like to get a feel of the data without building a huge model. To this end we will use random forests as inspired by [@erik2017], where we will refer to a classic reference for random forests [@breiman2001]. The technique computes the mean square error before and after permuting the features among the dataset to which we fit a random forest. The technique is implemented in the R-library \texttt{randomForest}. 
+```{r fig6, fig.height = 3.5, fig.width = 5, fig.align = "center", fig.cap = "Most important features found by random forest technique", message=FALSE, warning=FALSE, echo=FALSE}
+set.seed(2019)
+d1 = dim(train)[1]
+d2 = dim(train)[2]
+rf <- randomForest(x=train[1:d1,-d2], y=train$SalePrice[1:d1], ntree=100,importance=TRUE)
+rfImp <- importance(rf)
+rfImpDf <- data.frame(Variables = row.names(rfImp), MSE = rfImp[,1])
+rfImpDf <- rfImpDf[order(rfImpDf$MSE, decreasing = TRUE),]
+
+ggplot(rfImpDf[1:25,], aes(x=reorder(Variables, MSE), y=MSE, fill=MSE)) + geom_bar(stat = 'identity') + labs(x = 'Variables', y= '% increase MSE when variable is permuted') + coord_flip() + theme(legend.position="none")
+```
+
+In figure \@ref(fig:fig6) we see the 25 most important variables as ranked by the random forest model. We have already seen some of these variables' relationship with the response variable. Indeed it comes as no surprise that the above ground living area and overall quality are important, since houses scoring high in these variables are expected to be expensive. Let us now take a look on the distribution of the top 10 in figure \@ref(fig:fig7). Some of the variables seem to have a central Gaussian distribution like \textit{GrLivArea} or \textit{1stFlrSF}, while distribution for other variables are skew like \textit{OverallQual}, and yet other variables distribution are harder to determine since they have already undergone some transformation. We will keep this in mind when standardizing and and log-transforming in the modelling phase.
+
+```{r fig7, fig.height = 5, fig.width = 7, fig.align = "center", fig.cap = "Distributions of important variables", message=FALSE, warning=FALSE, echo=FALSE}
+# Plotting distributions of most important variables found with random forest
+plot1 <- ggplot(data=full, aes(x=GrLivArea)) +
+        geom_density() + labs(x='Square feet living area')
+
+plot2 <- ggplot(data=full, aes(x=as.factor(Neighborhood))) +
+        geom_histogram(stat='count') + labs(x='Neighborhood') + theme(axis.text.x = element_blank())
+
+plot3 <- ggplot(data= full, aes(x=as.factor(OverallQual))) +
+        geom_histogram(stat='count') + labs(x='Overall quality') + theme(axis.text.x = element_blank())
+
+plot4 <- ggplot(data= full, aes(x=as.factor(MSSubClass))) +
+        geom_histogram(stat='count') + labs(x='MSSubClass') + theme(axis.text.x = element_blank())
+
+plot5 <- ggplot(data= full, aes(x=GarageCars)) +
+        geom_histogram(stat='count') + labs(x='Size of garage in car capacity') + theme(axis.text.x = element_blank())
+
+plot6 <- ggplot(data= full, aes(x=TotalBsmtSF)) +
+        geom_density() + labs(x='Square feet basement')
+
+plot7 <- ggplot(data= full, aes(x=`1stFlrSF`)) +
+        geom_density() + labs(x='Square feet 1st floor')
+
+plot8 <- ggplot(data= full, aes(x=BsmtFinSF1)) +
+        geom_density() + labs(x='Type 1 finished square feet')
+
+plot9 <- ggplot(data= full, aes(x=BsmtFinType1)) +
+        geom_histogram(stat='count') + labs(x='Rating of basement finished area')
+
+plot10 <- ggplot(data= full, aes(x=`2ndFlrSF`)) +
+        geom_density() + labs(x='Square feet second floor')
+
+# Livearea, Neighborhood, Overall, MSS, GarageCars, TotalBsmtSF, 1stflrSF, BSMTfinSF1, BSMTfinTyp1, 2ndflrSF
+layout <- matrix(1:10,5,2,byrow=TRUE)
+multiplot(plot1,plot2,plot3,plot4,plot5,plot6,plot7,plot8,plot9,plot10, layout=layout)
+```
+One idea we could explore further is to merge the different neighborhoods in the neighborhood variable if the sale prices are similar enough. In this way we could reduce the dimensionality of this categorical variable.
+
+\newpage
+
+# Modeling and Diagnostics
+Let us start the modeling by a bit of feature engineering in order to prepare our dataset for modeling. This preparation will consists of one-hot encoding of all categorical variables and a standardization of numerical variables. 
+
+## Feature engineering
+We have encoded the categorical variables, and standardized the numerical variables which combined now amounts to 1460 observations with 199 variables.
+```{r feature engineering, message=FALSE, warning=FALSE, echo=FALSE}
+# Standardize numerical variables except for SalePrice
+varNumNames <- varNumNames[!(varNumNames %in% 'SalePrice')]
+# TODO stopifnot(!is.element("ExterCond", varNumNames))
+varNum <- full[, names(full) %in% varNumNames]
+preNum <- preProcess(varNum, method=c("center", "scale"))
+varNumStd <- predict(preNum, varNum) # TODO What is going on here?
+
+# One-hot encode nominal variables into 'dummy' variables
+varFactors <- full[, !(names(full) %in% varNumNames) & !(names(full) %in% 'SalePrice')]
+varDummy <- as.data.frame(model.matrix(~.-1, varFactors))
+varFull <- cbind(varNumStd, varDummy)
+varTrain <- varFull[0:nrow(train), ]
+```
+
+## A multiple linear regression model
+First we log transformation of SalePrice to remove right skewness of the data.
+```{r fig8, fig.align = "center", fig.cap = "Distributions of log SalePrice", message=FALSE, warning=FALSE, echo=FALSE}
+set.seed(2019)
+
+varTrain$logSalePrice <- log(train$SalePrice)
+ggplot(varTrain, aes(x=logSalePrice)) + geom_histogram(fill="steelblue2")
+```
+
+Consequently we will take a look at 11 most influential features chosen by the decision tree. 
+Out of them, 3 groups correlate pairwise more than 0.7.
+They are:
+  1. Numerical variables: TotalBsmtSF, 1stFlrSF, 2ndFlrSF
+  2. Ordinal variables: OverallQual ~ ExterQual
+  3. Numerical variables: GarageCars ~ GarageArea
+
+
+\textcolor{red}{TODO} Should we care that OverallQual ~ ExterQual are order features?
+We will try to choose and possibly engineer new variables from each group to minimize complexity of the final model.
+
+### 1stFlrSF ~ TotalBsmtSF ~ 2ndFlrSF
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+varTrain$hasBsmt <- varTrain$TotalBsmtSF > -3
+ggplot(varTrain, aes(x = `1stFlrSF`, y = logSalePrice, colour = hasBsmt)) + geom_point() + geom_smooth(method = lm)
+```
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+varTrain$hasSndFloor <- varTrain$`2ndFlrSF` > 0
+ggplot(varTrain, aes(x = `1stFlrSF`, y = logSalePrice, colour = hasSndFloor)) + geom_point() + geom_smooth(method = lm)
+```
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+model<-lm(logSalePrice ~ 1 + `1stFlrSF` + hasSndFloor + `1stFlrSF`:hasSndFloor, data = varTrain)
+# anova(model)
+```
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+model<-lm(logSalePrice ~ 1 + `1stFlrSF` + hasBsmt + hasSndFloor + `1stFlrSF`:hasBsmt + `1stFlrSF`:hasSndFloor, data = varTrain)
+# anova(model)
+```
+
+
+\textcolor{red}{TODO: } Ok, I don't know how to analyze the results from this one. The variables are interpreted as important, but later they're dropped by AIC in final model.
+
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+require(gridExtra)
+
+plot1 <- ggplot(data = varTrain, aes(x = varTrain$`1stFlrSF`, y = logSalePrice)) +
+geom_point(alpha = .125) + geom_smooth(method = "lm")
+
+plot2 <- ggplot(data = varTrain[varTrain$TotalBsmtSF > -3,], aes(x = varTrain$TotalBsmtSF[varTrain$TotalBsmtSF > -3], y = logSalePrice)) +
+geom_point(alpha = .125) + geom_smooth(method = "lm") + xlab("TotalBsmtSF")
+
+plot3 <- ggplot(data = varTrain[varTrain$`2ndFlrSF` > 0,], aes(x = varTrain$`2ndFlrSF`[varTrain$`2ndFlrSF` > 0], y = logSalePrice)) +
+geom_point(alpha = .125) + geom_smooth(method = "lm") + xlab("2ndFlrSF")
+
+grid.arrange(plot1, plot2, plot3, ncol=2)
+
+```
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+modelA <- lm(logSalePrice ~ 1 + `1stFlrSF`, data = varTrain)
+modelB <- lm(logSalePrice ~ 1 + `2ndFlrSF`, data = varTrain)
+
+model <- lm(logSalePrice ~ 1 + `1stFlrSF` + TotalBsmtSF + `2ndFlrSF`, data = varTrain)
+modelWithNewFeatures <- lm(logSalePrice ~ 1 + `1stFlrSF` + hasBsmt + hasSndFloor, data = varTrain)
+
+drop1(model, test="F")
+
+par(mfrow=c(2,2))
+
+```
+```{r}
+AIC(model)
+BIC(model)
+AIC(modelWithNewFeatures)
+BIC(modelWithNewFeatures)
+```
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+par(mfrow=c(2,2))
+plot(modelWithNewFeatures)
+```
+
+
+### OverallQual ~ ExterQual
+For these variables we can notice that ExterQual and OverallQual correllate, but the latter has higher granularity of its domain, therefore performs better when predicting SalePrice.
+
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+ggplot(data = varTrain, aes(x = varTrain$OverallQual, y = logSalePrice)) + geom_point(alpha = .125) + geom_smooth(method = "lm")
+ggplot(data = varTrain, aes(x = varTrain$ExterQual, y = logSalePrice)) + geom_point(alpha = .125) + geom_smooth(method = "lm")
+```
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+modelA <- lm(logSalePrice ~ 1 + OverallQual, data = varTrain)
+modelB <- lm(logSalePrice ~ 1 + ExterQual, data = varTrain)
+model <- lm(logSalePrice ~ 1 + OverallQual + ExterQual, data = varTrain)
+
+drop1(model, test="F")
+
+paste("OverallQual + ExterQual: ", AIC(model))
+paste("OverallQual: ", AIC(modelA))
+paste("ExterQual: ", AIC(modelB))
+```
+
+### GarageCars ~ GarageArea
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+ggplot(data = varTrain, aes(x = varTrain$GarageCars, y = logSalePrice)) + geom_point(alpha = .125) + geom_smooth(method = "lm")
+ggplot(data = varTrain, aes(x = varTrain$GarageArea, y = logSalePrice)) + geom_point(alpha = .125) + geom_smooth(method = "lm")
+```
+Contrary logic applies here, where GarageCars turns out to be better predictor than GarageArea. It's probably because prospective buyers are interested in number of cars that can fit in the garage rather than in correlated GarageArea that may not be as usable.
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+modelA <- lm(logSalePrice ~ 1 + GarageCars, data = varTrain)
+modelB <- lm(logSalePrice ~ 1 + GarageArea, data = varTrain)
+model <- lm(logSalePrice ~ 1 + GarageCars + GarageArea, data = varTrain)
+
+paste("GarageCars + GarageArea: ", AIC(model))
+paste("GarageCars: ", AIC(modelA))
+paste("GarageArea: ", AIC(modelB))
+```
+### Nominal features
+Now let's analyze nominal features using TukeyHSD - TODO: How should we analyze these resuls?
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+summary(fm1 <- aov(SalePrice ~ Neighborhood, data = train))
+tuk <- TukeyHSD(fm1, "Neighborhood", ordered = TRUE)
+plot(tuk)
+```
+
+### Final models
+We compare 5 models
+  1. Using only 3 most influential features: Neighborhood + GrLivArea + OverallQual
+  2. All 11 influential features
+  3. Using 11 features without removed insignificant correlated features
+  4. Same as above but with hasSndFloor and hasBsmt
+  5. Using all features
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+
+# eg. create_model('^Land|^Neighborhood')
+create_model <- function(nominal_fs_grep) {
+  featureNames <- grep(nominal_fs_grep, names(varTrain), value=TRUE)
+  smallFeatures <- varTrain[, union(featureNames, c('logSalePrice'))]
+  model <- lm(logSalePrice ~ ., data=smallFeatures)
+  return(model)
+}
+
+lm.small <- create_model('^Neighborhood|^GrLivArea|^OverallQual')
+lm.big <- create_model('^Neighborhood|^GrLivArea|^OverallQual|^1stFlrSF|^MSSubClass|^GarageCars|^2ndFlrSF|^GarageArea|^TotalBsmtSF|^BsmtFinType1|^ExterQual')
+lm.trimmed <- create_model('^Neighborhood|^GrLivArea|^OverallQual|^1stFlrSF|^MSSubClass|^GarageCars|^BsmtFinType1')
+tm.trimeed_with_floors <- create_model('^Neighborhood|^GrLivArea|^OverallQual|^1stFlrSF|^MSSubClass|^GarageCars|^BsmtFinType1|^hasSndFloor|^hasBsmt')
+lm.all <- create_model('*')
+```
+
+We can see that AIC scores for respective models remain relatively low with 3rd model compared to 2nd and 4th.  
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+# leverageOneObservations
+# varTrain <- varTrain[-leverageOneObservations, ]
+# logSalePrice <- logSalePrice[-leverageOneObservations]
+# fullFeature_lm <- glm(logSalePrice ~ ., data=varTrain)
+
+AIC(lm.small)
+AIC(lm.big)
+AIC(lm.trimmed)
+AIC(tm.trimeed_with_floors)
+AIC(lm.all)
+```
+
+Plotting diagnostic graphs for trimmed model we can notice that observations 199 and 596 remain outliers. 
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+par(mfrow=c(2,2))
+
+plot(lm.trimmed)
+
+# TODO: Move smwh removal of leverage 1
+# leverageOneObservations <- which(hatvalues(fullFeature_lm) %in% c(1))
+```
+
+
+TODO
+``{r}
+lm.resid <- residuals(fullFeature_lm)
+sorted_residuals <- sort(abs(lm.resid), decreasing=TRUE)
+
+par(mfrow=c(1, 2))
+plot(sort(lm.resid, decreasing=TRUE))
+plot(sort(abs(lm.resid), decreasing=TRUE))
+``
+
+TODO
+``{r}
+qq_outliers <- which(abs(lm.resid) > 0.3)
+qq_outliers
+
+varTrain <- varTrain[-qq_outliers, ]
+logSalePrice <- logSalePrice[-qq_outliers]
+  
+fullFeature_lm <- glm(logSalePrice ~ ., data=varTrain)
+
+par(mfrow=c(2,2))
+plot(fullFeature_lm)
+``
+
+
+* Linear Model
+* Diagnostics
+* Outliers
+  - Removing levels with few or no observations
+  - Removing outliers in residuals distribution
+* Skewness
+  - Applying log
+* More Feature engineering. Not all information is explained
+
+### Diagnostics and feature engineering
+
+* Feature engineering
+
+
+* Multiple linear regression
+* 
+* Lasso
+* XGboost
+
+Start by building any multiple linear regression models you think
+are appropriate. Create diagnostic plots to determine the appropriateness of your model. Discuss
+whether the assumptions are met. If not, take any actions you think are justified such as: transformations,
+removing outliers, removing variables, etc. . . Explain what decisions you make and
+explain why you made them. Check again your diagnostics for the new models
+
+# Final Models. 
+Summarize your final models: report the parameter estimates, standard errors,
+confidence intervals, and p-values. Interpret the fitted models in the context of the problem. If you
+have several models, then compare them. Note that there are several ways to compare different
+regression models: (i) partial F-tests, (ii) residuals and diagnostics and (iii) cross-validation (or other measures of prediction error). Use the test sample to get an estimate of the generalization error of your final model.
+
+# Discussion. 
+* Data cleaning should be better - too much information lost
+
+What are your final conclusions? Mention any limitations of your analysis, or
+possible future directions of research.
+
+Comments from class
+Goal: Construct a model in order to predict the price of a house given some features.
+Dataset: 3000 datapoints with 80 features. Training and testing is split equally.
+Flow:
+Dataset -> 
+atacleaning -> 
+Exploratory data analysis ->
+Feature engineering (Construct features) -> 
+Feature selection (p-value, AIC/BIC, Lasso, feature importance (sklearn) with RF) -> 
+Model: (Multiple Linear model, Lasso, boosting, RF, hyperparameter)
+
+Categorical features: 1-out-of-K coding
+
+Interaction based on correlation
+* Year built x overall quality
+* quality x remodel
+* quality x basement size
+* quality x living area
+* quality x baths
+
+Construct a benchmark model + its score on the test set and improve it via feature engineering + hyper-parameters
+
+# References

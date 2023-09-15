@@ -7,20 +7,16 @@ TO-DO:
   * Diagnostics
   * Outliers
     - Removing levels with few or no observations
-    - Remove low variance variables
   * Skewness
-    - Response variable (log-transform or Boxcox transform (better))
-  * More Feature engineering and feature selection. Not all information is explained
-    - Use TukeyHSD after aov to find significance of difference in parameters -> group variables
-    - anova
-    
+  * More Feature engineering. Not all information is explained
+    - Remove low variance variables
   * Check diagnostics again
 ## More advanced modelling
   * Lasso
     - Diagnostics
   * Ridge
     - Diagnostics
-  * Glmnet
+  * Use glmnet
 ## Final Models
   * Report the summary: parameter estimates, standard errors, confidence intervals, and p-values
   * Interpret
