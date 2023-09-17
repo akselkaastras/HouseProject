@@ -657,11 +657,11 @@ Future directions of our research could include an improvement of our reduced li
 # References
 <div id="refs"></div>
 
-\newpage 
+
 # Appendix
 ```{r, message=FALSE, warning=FALSE, echo=FALSE}
 summaryAIC <- cbind(summary(modelAICboth)$coefficients,confin)
 kable(summaryAIC, format="latex")  %>%
-  kable_styling(latex_options="scale_down")
+  kable_styling(latex_options=c("scale_down","hold_position"))
 ```
 
