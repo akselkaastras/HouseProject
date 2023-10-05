@@ -1,30 +1,10 @@
-# HouseProject
-The art of predicting the sale price of homes in Iowa using multiple linear regression and other good stuff.
+# House Prices: Advanced Regression Techniques
+This project is about the implementation on a real data set of the statistical methods we reviewed in the course MAP553 Art of Regression at École Polytechnique in 2019. The data set is taken from Kaggle competition House Prices: Advanced Regression Techniques
 
-TO-DO:
-## Simple modelling
-  * Simple multiple linear regression model
-  * Diagnostics
-  * Outliers
-    - Removing levels with few or no observations
-  * Skewness
-  * More Feature engineering. Not all information is explained
-    - Remove low variance variables
-  * Check diagnostics again
-## More advanced modelling
-  * Lasso
-    - Diagnostics
-  * Ridge
-    - Diagnostics
-  * Use glmnet
-## Final Models
-  * Report the summary: parameter estimates, standard errors, confidence intervals, and p-values
-  * Interpret
-  * Compare models
-    - Partial F-tests
-    - Residuals and diagnostics
-    - Cross-validation (or other measures of prediction error)
-    - Use the test sample to get an estimate of the generalization error of your final model.
- Discussion
-  
+**Data description.** The data records the selling price of about 1500 houses along with 79 explanatory
+variables describing (almost) every aspect of residential homes in Ames, Iowa. The file data_description.txt contains a full description of each column.
 
+**Goal.**  This project aims to predict the final price of each home.
+
+**Our approach.** A report describing which models and diagnostics we used for predicting the final price of each home can be found in Rmarkdown format in `houseProject.rmd`, which produces the .pdf file `houseProject.pdf`.
+Among other things we conclude that a Lasso regression model with additional feature extraction performs the the best on the given test data. 
